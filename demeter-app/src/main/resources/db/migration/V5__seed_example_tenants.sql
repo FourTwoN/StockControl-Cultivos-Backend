@@ -1,0 +1,7 @@
+-- =============================================
+-- V5: Example tenants (CLEANED)
+-- =============================================
+-- This migration is intentionally empty.
+-- No seed data - database should start clean.
+-- Tenants should be created via API/Admin UI.
+-- =============================================

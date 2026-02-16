@@ -1,0 +1,7 @@
+-- =============================================
+-- V6: Tenant seed data (CLEANED)
+-- =============================================
+-- This migration is intentionally empty.
+-- No seed data - database should start clean.
+-- Data should be loaded via API/Admin UI.
+-- =============================================
