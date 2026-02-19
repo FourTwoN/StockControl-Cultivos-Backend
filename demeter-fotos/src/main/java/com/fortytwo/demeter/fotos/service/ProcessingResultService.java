@@ -29,8 +29,8 @@ import java.util.UUID;
 /**
  * Service for processing ML Worker callback results.
  *
- * <p>Receives processing results from the ML Worker and persists
- * detections, classifications, and estimations to the database.
+ * <p>Persists ML results (detections, classifications, estimations) to database.
+ * For stock update orchestration, see StockUpdateOrchestrator in demeter-app.
  */
 @ApplicationScoped
 public class ProcessingResultService {
@@ -119,6 +119,15 @@ public class ProcessingResultService {
     }
 
     /**
+     * Check if session is completed.
+     */
+    public boolean isSessionCompleted(UUID sessionId) {
+        PhotoProcessingSession session = sessionRepository.findByIdOptional(sessionId)
+                .orElseThrow(() -> new EntityNotFoundException("PhotoProcessingSession", sessionId));
+        return session.getStatus() == ProcessingStatus.COMPLETED;
+    }
+
+    /**
      * Mark a session as failed due to processing error.
      *
      * @param sessionId Session ID
@@ -139,6 +148,9 @@ public class ProcessingResultService {
 
     private Detection createDetection(Image image, DetectionResultItem item) {
         Detection detection = new Detection();
+        // Set session from image (required)
+        detection.setSession(image.getSession());
+        // Keep legacy image reference for backward compatibility
         detection.setImage(image);
         detection.setLabel(item.label());
         detection.setConfidence(BigDecimal.valueOf(item.confidence()));
@@ -157,9 +169,13 @@ public class ProcessingResultService {
 
     private Classification createClassification(Image image, ClassificationResultItem item) {
         Classification classification = new Classification();
+        // Set session from image
+        classification.setSession(image.getSession());
+        // Keep legacy fields for backward compatibility
         classification.setImage(image);
         classification.setCategory(item.label());
-        classification.setConfidence(BigDecimal.valueOf(item.confidence()));
+        // Set confidence as productConf (will be properly populated when ML Worker sends structured data)
+        classification.setProductConf((int) (item.confidence() * 100));
         return classification;
     }
 

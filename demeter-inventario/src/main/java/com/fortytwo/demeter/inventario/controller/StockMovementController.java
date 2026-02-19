@@ -15,6 +15,7 @@ import jakarta.ws.rs.core.Response;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,12 +36,8 @@ public class StockMovementController {
             @QueryParam("type") String type,
             @QueryParam("startDate") String startDateStr,
             @QueryParam("endDate") String endDateStr) {
-        Instant startDate = startDateStr != null
-                ? LocalDate.parse(startDateStr).atStartOfDay(ZoneOffset.UTC).toInstant()
-                : null;
-        Instant endDate = endDateStr != null
-                ? LocalDate.parse(endDateStr).atStartOfDay(ZoneOffset.UTC).plusDays(1).toInstant()
-                : null;
+        Instant startDate = parseDateTime(startDateStr, false);
+        Instant endDate = parseDateTime(endDateStr, true);
         return stockMovementService.findAll(page, size, batchId, type, startDate, endDate);
     }
 
@@ -64,12 +61,8 @@ public class StockMovementController {
     public List<StockMovementDTO> getByDateRange(
             @QueryParam("from") String fromStr,
             @QueryParam("to") String toStr) {
-        Instant from = fromStr != null
-                ? LocalDate.parse(fromStr).atStartOfDay(ZoneOffset.UTC).toInstant()
-                : Instant.EPOCH;
-        Instant to = toStr != null
-                ? LocalDate.parse(toStr).atStartOfDay(ZoneOffset.UTC).plusDays(1).toInstant()
-                : Instant.now();
+        Instant from = fromStr != null ? parseDateTime(fromStr, false) : Instant.EPOCH;
+        Instant to = toStr != null ? parseDateTime(toStr, true) : Instant.now();
         return stockMovementService.findByDateRange(from, to);
     }
 
@@ -85,5 +78,30 @@ public class StockMovementController {
     public Response create(@Valid CreateStockMovementRequest request) {
         StockMovementDTO created = stockMovementService.create(request);
         return Response.status(Response.Status.CREATED).entity(created).build();
+    }
+
+    /**
+     * Parses a date/datetime string into an Instant.
+     * Supports both ISO-8601 datetime (2020-01-01T00:00:00Z) and date-only (2020-01-01) formats.
+     *
+     * @param dateStr the date string to parse
+     * @param endOfDay if true and parsing date-only, returns end of day instead of start
+     * @return the parsed Instant, or null if input is null
+     */
+    private Instant parseDateTime(String dateStr, boolean endOfDay) {
+        if (dateStr == null) {
+            return null;
+        }
+        try {
+            // Try ISO-8601 datetime format first (e.g., 2020-01-01T00:00:00Z)
+            return Instant.parse(dateStr);
+        } catch (DateTimeParseException e) {
+            // Fallback to date-only format (e.g., 2020-01-01)
+            LocalDate date = LocalDate.parse(dateStr);
+            if (endOfDay) {
+                return date.atStartOfDay(ZoneOffset.UTC).plusDays(1).toInstant();
+            }
+            return date.atStartOfDay(ZoneOffset.UTC).toInstant();
+        }
     }
 }

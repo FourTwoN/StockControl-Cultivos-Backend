@@ -1,6 +1,7 @@
 dependencies {
     implementation(project(":demeter-common"))
     implementation(project(":demeter-productos"))
+    implementation(project(":demeter-empaquetado"))
 
     // REST client for calling ML Worker
     implementation("io.quarkus:quarkus-rest-client-jackson")

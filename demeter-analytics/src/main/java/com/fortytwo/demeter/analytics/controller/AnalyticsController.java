@@ -15,6 +15,7 @@ import com.fortytwo.demeter.common.auth.RoleConstants;
 import com.fortytwo.demeter.common.dto.PagedResponse;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -49,12 +50,8 @@ public class AnalyticsController {
     public List<MovementSummary> getMovements(
             @QueryParam("from") String from,
             @QueryParam("to") String to) {
-        Instant fromInstant = from != null
-                ? LocalDate.parse(from).atStartOfDay(ZoneOffset.UTC).toInstant()
-                : Instant.EPOCH;
-        Instant toInstant = to != null
-                ? LocalDate.parse(to).atStartOfDay(ZoneOffset.UTC).plusDays(1).toInstant()
-                : Instant.now();
+        Instant fromInstant = from != null ? parseDateTime(from, false) : Instant.EPOCH;
+        Instant toInstant = to != null ? parseDateTime(to, true) : Instant.now();
         return analyticsService.getMovementsByDateRange(fromInstant, toInstant);
     }
 
@@ -96,12 +93,8 @@ public class AnalyticsController {
             @QueryParam("type") String movementType,
             @QueryParam("from") String from,
             @QueryParam("to") String to) {
-        Instant fromInstant = from != null
-                ? LocalDate.parse(from).atStartOfDay(ZoneOffset.UTC).toInstant()
-                : null;
-        Instant toInstant = to != null
-                ? LocalDate.parse(to).atStartOfDay(ZoneOffset.UTC).plusDays(1).toInstant()
-                : null;
+        Instant fromInstant = parseDateTime(from, false);
+        Instant toInstant = parseDateTime(to, true);
         return analyticsService.getMovementHistory(page, size, movementType, fromInstant, toInstant);
     }
 
@@ -119,10 +112,10 @@ public class AnalyticsController {
             @QueryParam("from") String from,
             @QueryParam("to") String to) {
         Instant fromInstant = from != null
-                ? LocalDate.parse(from).atStartOfDay(ZoneOffset.UTC).toInstant()
+                ? parseDateTime(from, false)
                 : Instant.now().minusSeconds(30L * 24 * 60 * 60);
         Instant toInstant = to != null
-                ? LocalDate.parse(to).atStartOfDay(ZoneOffset.UTC).plusDays(1).toInstant()
+                ? parseDateTime(to, true)
                 : Instant.now();
         return analyticsService.getStockHistory(fromInstant, toInstant);
     }
@@ -133,5 +126,24 @@ public class AnalyticsController {
     public List<SalesSummaryDTO> getSalesSummary(
             @QueryParam("period") @DefaultValue("monthly") String period) {
         return analyticsService.getSalesSummary(period);
+    }
+
+    /**
+     * Parses a date/datetime string into an Instant.
+     * Supports both ISO-8601 datetime (2020-01-01T00:00:00Z) and date-only (2020-01-01) formats.
+     */
+    private Instant parseDateTime(String dateStr, boolean endOfDay) {
+        if (dateStr == null) {
+            return null;
+        }
+        try {
+            return Instant.parse(dateStr);
+        } catch (DateTimeParseException e) {
+            LocalDate date = LocalDate.parse(dateStr);
+            if (endOfDay) {
+                return date.atStartOfDay(ZoneOffset.UTC).plusDays(1).toInstant();
+            }
+            return date.atStartOfDay(ZoneOffset.UTC).toInstant();
+        }
     }
 }

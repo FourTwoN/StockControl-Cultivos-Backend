@@ -31,8 +31,9 @@ public class StockBatchController {
             @QueryParam("size") @DefaultValue("20") int size,
             @QueryParam("productId") UUID productId,
             @QueryParam("locationId") UUID locationId,
-            @QueryParam("status") String status) {
-        return stockBatchService.findAll(page, size, productId, locationId, status);
+            @QueryParam("status") String status,
+            @QueryParam("activeOnly") Boolean activeOnly) {
+        return stockBatchService.findAll(page, size, productId, locationId, status, activeOnly);
     }
 
     @GET
@@ -50,10 +51,17 @@ public class StockBatchController {
     }
 
     @GET
-    @Path("/by-warehouse/{warehouseId}")
+    @Path("/by-location/{locationId}")
     @RolesAllowed({RoleConstants.ADMIN, RoleConstants.SUPERVISOR, RoleConstants.WORKER, RoleConstants.VIEWER})
-    public List<StockBatchDTO> getByWarehouse(@PathParam("warehouseId") UUID warehouseId) {
-        return stockBatchService.findByWarehouseId(warehouseId);
+    public List<StockBatchDTO> getByStorageLocation(@PathParam("locationId") UUID locationId) {
+        return stockBatchService.findByStorageLocationId(locationId);
+    }
+
+    @GET
+    @Path("/active/by-location/{locationId}")
+    @RolesAllowed({RoleConstants.ADMIN, RoleConstants.SUPERVISOR, RoleConstants.WORKER, RoleConstants.VIEWER})
+    public List<StockBatchDTO> getActiveByStorageLocation(@PathParam("locationId") UUID locationId) {
+        return stockBatchService.findActiveByStorageLocation(locationId);
     }
 
     @GET

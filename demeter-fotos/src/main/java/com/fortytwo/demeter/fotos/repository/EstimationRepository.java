@@ -12,4 +12,12 @@ public class EstimationRepository implements PanacheRepositoryBase<Estimation, U
     public List<Estimation> findBySessionId(UUID sessionId) {
         return find("session.id", sessionId).list();
     }
+
+    public List<Estimation> findBySessionIdAndType(UUID sessionId, String estimationType) {
+        return find("session.id = ?1 AND estimationType = ?2", sessionId, estimationType).list();
+    }
+
+    public List<Estimation> findByClassificationId(UUID classificationId) {
+        return find("classification.id", classificationId).list();
+    }
 }

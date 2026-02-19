@@ -21,6 +21,9 @@ class StockBatchControllerTest {
     private static final String TENANT = "tenant-stock-batch";
 
     private static String productId;
+    private static String warehouseId;
+    private static String areaId;
+    private static String locationId;
     private static String batchId;
 
     @Test
@@ -41,6 +44,54 @@ class StockBatchControllerTest {
 
     @Test
     @Order(2)
+    void setup_createWarehouse() {
+        warehouseId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Stock Batch Test Warehouse"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(3)
+    void setup_createArea() {
+        areaId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Stock Batch Test Area"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses/" + warehouseId + "/areas")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(4)
+    void setup_createLocation() {
+        locationId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Stock Batch Test Location"}
+                        """)
+                .when()
+                .post("/api/v1/areas/" + areaId + "/locations")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(5)
     void createStockBatch_shouldReturn201() {
         batchId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -48,26 +99,25 @@ class StockBatchControllerTest {
                 .body("""
                         {
                             "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
                             "batchCode": "BATCH-001",
-                            "quantity": 100,
-                            "unit": "kg"
+                            "quantity": 100
                         }
-                        """.formatted(productId))
+                        """.formatted(productId, locationId))
                 .when()
                 .post("/api/v1/stock-batches")
                 .then()
                 .statusCode(201)
                 .body("id", notNullValue())
                 .body("batchCode", equalTo("BATCH-001"))
-                .body("quantity", equalTo(100))
-                .body("unit", equalTo("kg"))
+                .body("quantityCurrent", equalTo(100))
                 .body("status", equalTo("ACTIVE"))
-                .body("productId", equalTo(productId))
                 .extract().path("id");
     }
 
     @Test
-    @Order(3)
+    @Order(6)
     void getStockBatch_shouldReturnCreated() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -82,7 +132,7 @@ class StockBatchControllerTest {
     }
 
     @Test
-    @Order(4)
+    @Order(7)
     void listStockBatches_shouldReturnPaged() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -98,7 +148,7 @@ class StockBatchControllerTest {
     }
 
     @Test
-    @Order(5)
+    @Order(8)
     void getByProduct_shouldReturnBatches() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -111,7 +161,19 @@ class StockBatchControllerTest {
     }
 
     @Test
-    @Order(6)
+    @Order(9)
+    void getByLocation_shouldReturnBatches() {
+        given()
+                .header("X-Tenant-ID", TENANT)
+                .when()
+                .get("/api/v1/stock-batches/by-location/" + locationId)
+                .then()
+                .statusCode(200)
+                .body("size()", greaterThanOrEqualTo(1));
+    }
+
+    @Test
+    @Order(10)
     void getByStatus_shouldReturnActiveBatches() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -123,14 +185,13 @@ class StockBatchControllerTest {
     }
 
     @Test
-    @Order(7)
+    @Order(11)
     void updateStockBatch_shouldModify() {
         given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
                         {
-                            "unit": "lbs",
                             "status": "QUARANTINED"
                         }
                         """)
@@ -138,12 +199,11 @@ class StockBatchControllerTest {
                 .put("/api/v1/stock-batches/" + batchId)
                 .then()
                 .statusCode(200)
-                .body("unit", equalTo("lbs"))
                 .body("status", equalTo("QUARANTINED"));
     }
 
     @Test
-    @Order(8)
+    @Order(12)
     void deleteStockBatch_shouldReturn204() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -162,7 +222,7 @@ class StockBatchControllerTest {
     }
 
     @Test
-    @Order(9)
+    @Order(13)
     void createStockBatch_invalidProduct_shouldReturn404() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -170,11 +230,12 @@ class StockBatchControllerTest {
                 .body("""
                         {
                             "productId": "00000000-0000-0000-0000-000000000000",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
                             "batchCode": "BATCH-INVALID",
-                            "quantity": 10,
-                            "unit": "kg"
+                            "quantity": 10
                         }
-                        """)
+                        """.formatted(locationId))
                 .when()
                 .post("/api/v1/stock-batches")
                 .then()
@@ -182,14 +243,14 @@ class StockBatchControllerTest {
     }
 
     @Test
-    @Order(10)
+    @Order(14)
     void createStockBatch_missingRequired_shouldReturn400() {
         given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
                         {
-                            "unit": "kg"
+                            "batchCode": "BATCH-MISSING"
                         }
                         """)
                 .when()

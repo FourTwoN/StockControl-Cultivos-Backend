@@ -100,14 +100,11 @@ public class AnalyticsService {
                     String productName = product != null ? product.getName() : "Unknown";
                     String productSku = product != null ? product.getSku() : "N/A";
 
-                    BigDecimal totalQuantity = batches.stream()
-                            .map(StockBatch::getQuantity)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal totalQuantity = BigDecimal.valueOf(batches.stream()
+                            .mapToInt(StockBatch::getQuantityCurrent)
+                            .sum());
 
-                    String unit = batches.stream()
-                            .findFirst()
-                            .map(StockBatch::getUnit)
-                            .orElse("N/A");
+                    String unit = "units";
 
                     return new StockSummary(
                             productId,
@@ -137,9 +134,9 @@ public class AnalyticsService {
                     String type = entry.getKey().name();
                     List<StockMovement> typeMovements = entry.getValue();
 
-                    BigDecimal totalQuantity = typeMovements.stream()
-                            .map(StockMovement::getQuantity)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal totalQuantity = BigDecimal.valueOf(typeMovements.stream()
+                            .mapToInt(StockMovement::getQuantity)
+                            .sum());
 
                     Instant firstMovement = typeMovements.stream()
                             .map(StockMovement::getPerformedAt)
@@ -179,9 +176,9 @@ public class AnalyticsService {
 
                     String productName = product != null ? product.getName() : "Unknown";
 
-                    BigDecimal totalQuantity = batches.stream()
-                            .map(StockBatch::getQuantity)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal totalQuantity = BigDecimal.valueOf(batches.stream()
+                            .mapToInt(StockBatch::getQuantityCurrent)
+                            .sum());
 
                     List<Cost> costs = costRepository.findByProductId(productId);
                     BigDecimal averageCost = calculateAverageCost(costs);
@@ -384,7 +381,7 @@ public class AnalyticsService {
         return new MovementHistory(
                 movement.getId(),
                 movement.getMovementType().name(),
-                movement.getQuantity(),
+                BigDecimal.valueOf(movement.getQuantity()),
                 movement.getUnit(),
                 movement.getNotes(),
                 movement.getPerformedBy(),
@@ -446,11 +443,12 @@ public class AnalyticsService {
         Map<String, BigDecimal> quantityByDate = new LinkedHashMap<>();
         for (StockMovement m : movements) {
             String date = m.getPerformedAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
+            BigDecimal qty = BigDecimal.valueOf(m.getQuantity());
             BigDecimal change = switch (m.getMovementType()) {
-                case ENTRADA -> m.getQuantity();
-                case MUERTE, VENTA -> m.getQuantity().negate();
-                case TRASPLANTE -> BigDecimal.ZERO;
-                case AJUSTE -> m.getQuantity();
+                case FOTO, MANUAL_INIT, PLANTADO, ENTRADA -> qty;
+                case MUERTE, VENTA -> qty.negate();
+                case MOVIMIENTO, TRASPLANTE, MOVIMIENTO_TRASPLANTE -> BigDecimal.ZERO;
+                case AJUSTE -> qty;
             };
             quantityByDate.merge(date, change, BigDecimal::add);
         }

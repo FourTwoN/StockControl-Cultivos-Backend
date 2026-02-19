@@ -14,6 +14,9 @@ public class PhotoProcessingSession extends BaseEntity {
     @Column(nullable = false, length = 50)
     private ProcessingStatus status = ProcessingStatus.PENDING;
 
+    @Column(name = "storage_location_id")
+    private UUID storageLocationId;
+
     @Column(name = "product_id")
     private UUID productId;
 
@@ -37,6 +40,7 @@ public class PhotoProcessingSession extends BaseEntity {
 
     // Getters
     public ProcessingStatus getStatus() { return status; }
+    public UUID getStorageLocationId() { return storageLocationId; }
     public UUID getProductId() { return productId; }
     public UUID getBatchId() { return batchId; }
     public UUID getUploadedBy() { return uploadedBy; }
@@ -47,6 +51,7 @@ public class PhotoProcessingSession extends BaseEntity {
 
     // Setters
     public void setStatus(ProcessingStatus status) { this.status = status; }
+    public void setStorageLocationId(UUID storageLocationId) { this.storageLocationId = storageLocationId; }
     public void setProductId(UUID productId) { this.productId = productId; }
     public void setBatchId(UUID batchId) { this.batchId = batchId; }
     public void setUploadedBy(UUID uploadedBy) { this.uploadedBy = uploadedBy; }

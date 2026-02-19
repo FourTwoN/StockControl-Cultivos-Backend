@@ -21,6 +21,9 @@ class CostControllerTest {
     private static final String TENANT = "tenant-cost";
 
     private static String productId;
+    private static String warehouseId;
+    private static String areaId;
+    private static String locationId;
     private static String batchId;
     private static String costId;
 
@@ -42,6 +45,54 @@ class CostControllerTest {
 
     @Test
     @Order(2)
+    void setup_createWarehouse() {
+        warehouseId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Cost Test Warehouse"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(3)
+    void setup_createArea() {
+        areaId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Cost Test Area"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses/" + warehouseId + "/areas")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(4)
+    void setup_createLocation() {
+        locationId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Cost Test Location"}
+                        """)
+                .when()
+                .post("/api/v1/areas/" + areaId + "/locations")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(5)
     void setup_createBatch() {
         batchId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -49,11 +100,12 @@ class CostControllerTest {
                 .body("""
                         {
                             "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
                             "batchCode": "COST-BATCH",
-                            "quantity": 100,
-                            "unit": "kg"
+                            "quantity": 100
                         }
-                        """.formatted(productId))
+                        """.formatted(productId, locationId))
                 .when()
                 .post("/api/v1/stock-batches")
                 .then()
@@ -62,7 +114,7 @@ class CostControllerTest {
     }
 
     @Test
-    @Order(3)
+    @Order(6)
     void createCost_shouldReturn201() {
         costId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -91,7 +143,7 @@ class CostControllerTest {
     }
 
     @Test
-    @Order(4)
+    @Order(7)
     void getCost_shouldReturnCreated() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -106,7 +158,7 @@ class CostControllerTest {
     }
 
     @Test
-    @Order(5)
+    @Order(8)
     void listCosts_shouldReturnPaged() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -122,7 +174,7 @@ class CostControllerTest {
     }
 
     @Test
-    @Order(6)
+    @Order(9)
     void getCostsByProduct_shouldReturn() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -134,7 +186,7 @@ class CostControllerTest {
     }
 
     @Test
-    @Order(7)
+    @Order(10)
     void getCostsByBatch_shouldReturn() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -146,7 +198,7 @@ class CostControllerTest {
     }
 
     @Test
-    @Order(8)
+    @Order(11)
     void updateCost_shouldModify() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -168,7 +220,7 @@ class CostControllerTest {
     }
 
     @Test
-    @Order(9)
+    @Order(12)
     void deleteCost_shouldReturn204() {
         given()
                 .header("X-Tenant-ID", TENANT)

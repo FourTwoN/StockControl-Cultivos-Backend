@@ -2,16 +2,19 @@ package com.fortytwo.demeter.inventario.service;
 
 import com.fortytwo.demeter.common.dto.PagedResponse;
 import com.fortytwo.demeter.common.exception.EntityNotFoundException;
+import com.fortytwo.demeter.fotos.repository.PhotoProcessingSessionRepository;
 import com.fortytwo.demeter.inventario.dto.CreateStockMovementRequest;
 import com.fortytwo.demeter.inventario.dto.StockMovementDTO;
 import com.fortytwo.demeter.inventario.model.BatchStatus;
 import com.fortytwo.demeter.inventario.model.MovementType;
+import com.fortytwo.demeter.inventario.model.SourceType;
 import com.fortytwo.demeter.inventario.model.StockBatch;
 import com.fortytwo.demeter.inventario.model.StockBatchMovement;
 import com.fortytwo.demeter.inventario.model.StockMovement;
 import com.fortytwo.demeter.inventario.repository.StockBatchMovementRepository;
 import com.fortytwo.demeter.inventario.repository.StockBatchRepository;
 import com.fortytwo.demeter.inventario.repository.StockMovementRepository;
+import com.fortytwo.demeter.usuarios.repository.UserRepository;
 import io.quarkus.panache.common.Page;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -37,6 +40,12 @@ public class StockMovementService {
 
     @Inject
     StockBatchMovementRepository stockBatchMovementRepository;
+
+    @Inject
+    UserRepository userRepository;
+
+    @Inject
+    PhotoProcessingSessionRepository photoProcessingSessionRepository;
 
     public PagedResponse<StockMovementDTO> findAll(int page, int size, UUID batchId, String type, Instant startDate, Instant endDate) {
         StringBuilder query = new StringBuilder("1=1");
@@ -89,15 +98,28 @@ public class StockMovementService {
     @Transactional
     public StockMovementDTO create(CreateStockMovementRequest request) {
         MovementType movementType = MovementType.valueOf(request.movementType());
+        SourceType sourceType = SourceType.valueOf(request.sourceType());
 
         StockMovement movement = new StockMovement();
         movement.setMovementType(movementType);
         movement.setQuantity(request.quantity());
-        movement.setUnit(request.unit());
-        movement.setReferenceId(request.referenceId());
-        movement.setReferenceType(request.referenceType());
-        movement.setNotes(request.notes());
-        movement.setPerformedBy(request.performedBy());
+        movement.setInbound(request.isInbound());
+        movement.setUser(userRepository.findByIdOptional(request.userId())
+                .orElseThrow(() -> new EntityNotFoundException("User", request.userId())));
+        movement.setSourceType(sourceType);
+        movement.setReasonDescription(request.reasonDescription());
+
+        if (request.processingSessionId() != null) {
+            movement.setProcessingSession(photoProcessingSessionRepository.findByIdOptional(request.processingSessionId())
+                    .orElseThrow(() -> new EntityNotFoundException("PhotoProcessingSession", request.processingSessionId())));
+        }
+        if (request.parentMovementId() != null) {
+            movement.setParentMovement(stockMovementRepository.findByIdOptional(request.parentMovementId())
+                    .orElseThrow(() -> new EntityNotFoundException("StockMovement", request.parentMovementId())));
+        }
+
+        movement.setUnitPrice(request.unitPrice());
+        movement.setTotalPrice(request.totalPrice());
         movement.setPerformedAt(request.performedAt() != null ? request.performedAt() : Instant.now());
 
         stockMovementRepository.persist(movement);
@@ -115,27 +137,28 @@ public class StockMovementService {
             applyQuantityChange(batch, movementType, bq.quantity());
         }
 
-        log.info("Created stock movement type={} with {} batch entries",
-                movementType, request.batchQuantities().size());
+        log.info("Created stock movement type={} source={} with {} batch entries",
+                movementType, sourceType, request.batchQuantities().size());
 
         return StockMovementDTO.from(movement);
     }
 
     private void applyQuantityChange(StockBatch batch, MovementType movementType, BigDecimal movementQuantity) {
-        BigDecimal currentQuantity = batch.getQuantity();
-        BigDecimal newQuantity;
+        int currentQuantity = batch.getQuantityCurrent();
+        int movementQty = movementQuantity.intValue();
+        int newQuantity;
 
         switch (movementType) {
-            case ENTRADA -> newQuantity = currentQuantity.add(movementQuantity);
-            case MUERTE, VENTA -> newQuantity = currentQuantity.subtract(movementQuantity);
-            case TRASPLANTE -> newQuantity = currentQuantity.subtract(movementQuantity);
-            case AJUSTE -> newQuantity = movementQuantity;
+            case FOTO, MANUAL_INIT, PLANTADO, ENTRADA -> newQuantity = currentQuantity + movementQty;
+            case MUERTE, VENTA -> newQuantity = currentQuantity - movementQty;
+            case MOVIMIENTO, TRASPLANTE, MOVIMIENTO_TRASPLANTE -> newQuantity = currentQuantity; // No change to source batch
+            case AJUSTE -> newQuantity = movementQty;
             default -> throw new IllegalArgumentException("Unknown movement type: " + movementType);
         }
 
-        batch.setQuantity(newQuantity);
+        batch.setQuantityCurrent(newQuantity);
 
-        if (newQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+        if (newQuantity <= 0) {
             batch.setStatus(BatchStatus.DEPLETED);
             log.info("Batch {} depleted after movement", batch.getBatchCode());
         }

@@ -25,6 +25,8 @@ class AnalyticsControllerTest {
     private static String saleId;
     private static String costId;
     private static String warehouseId;
+    private static String areaId;
+    private static String locationId;
 
     @Test
     @Order(1)
@@ -44,6 +46,54 @@ class AnalyticsControllerTest {
 
     @Test
     @Order(2)
+    void setup_createWarehouse() {
+        warehouseId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Analytics Test Warehouse"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(3)
+    void setup_createArea() {
+        areaId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Analytics Test Area"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses/" + warehouseId + "/areas")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(4)
+    void setup_createLocation() {
+        locationId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Analytics Test Location"}
+                        """)
+                .when()
+                .post("/api/v1/areas/" + areaId + "/locations")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(5)
     void setup_createBatch() {
         batchId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -51,11 +101,12 @@ class AnalyticsControllerTest {
                 .body("""
                         {
                             "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
                             "batchCode": "ANALYTICS-BATCH-001",
-                            "quantity": 200,
-                            "unit": "units"
+                            "quantity": 200
                         }
-                        """.formatted(productId))
+                        """.formatted(productId, locationId))
                 .when()
                 .post("/api/v1/stock-batches")
                 .then()
@@ -64,7 +115,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(3)
+    @Order(6)
     void setup_createAndCompleteSale() {
         saleId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -98,7 +149,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(4)
+    @Order(7)
     void setup_createCost() {
         costId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -121,26 +172,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(5)
-    void setup_createWarehouse() {
-        warehouseId = given()
-                .header("X-Tenant-ID", TENANT)
-                .contentType(ContentType.JSON)
-                .body("""
-                        {
-                            "name": "Analytics Warehouse",
-                            "address": "123 Analytics St"
-                        }
-                        """)
-                .when()
-                .post("/api/v1/warehouses")
-                .then()
-                .statusCode(201)
-                .extract().path("id");
-    }
-
-    @Test
-    @Order(6)
+    @Order(8)
     void stockSummary_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -152,7 +184,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(7)
+    @Order(9)
     void movements_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -166,7 +198,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(8)
+    @Order(10)
     void inventoryValuation_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -178,7 +210,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(9)
+    @Order(11)
     void topProducts_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -191,7 +223,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(10)
+    @Order(12)
     void locationOccupancy_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -203,7 +235,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(11)
+    @Order(13)
     void dashboard_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -215,7 +247,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(12)
+    @Order(14)
     void movementHistory_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -230,7 +262,7 @@ class AnalyticsControllerTest {
     }
 
     @Test
-    @Order(13)
+    @Order(15)
     void movementHistoryFiltered_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)

@@ -1,17 +1,23 @@
 package com.fortytwo.demeter.inventario.dto;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Min;
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 
 public record UpdateStockBatchRequest(
-    @Size(max = 50) String unit,
-    UUID warehouseId,
-    UUID binId,
-    String status,
+    UUID storageLocationId,
+    String productState,
+    UUID productSizeId,
+    UUID packagingCatalogId,
+    @Min(0) Integer quantityCurrent,
+    LocalDate plantingDate,
+    LocalDate germinationDate,
+    LocalDate transplantDate,
+    LocalDate expectedReadyDate,
+    BigDecimal qualityScore,
+    String notes,
     Map<String, Object> customAttributes,
-    Instant expiryDate
+    String status
 ) {}

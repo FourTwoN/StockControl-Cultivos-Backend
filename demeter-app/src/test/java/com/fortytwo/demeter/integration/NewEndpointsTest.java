@@ -22,9 +22,13 @@ class NewEndpointsTest {
     private static final String TENANT = "tenant-new-ep";
 
     private static String productId;
+    private static String warehouseId;
+    private static String areaId;
+    private static String locationId;
     private static String batchId;
     private static String costId;
     private static String saleId;
+    private static String userId;
 
     // --- Setup: create test data ---
 
@@ -46,20 +50,15 @@ class NewEndpointsTest {
 
     @Test
     @Order(2)
-    void setup_createBatch() {
-        batchId = given()
+    void setup_createWarehouse() {
+        warehouseId = given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
-                        {
-                            "productId": "%s",
-                            "batchCode": "NEP-BATCH-001",
-                            "quantity": 300,
-                            "unit": "units"
-                        }
-                        """.formatted(productId))
+                        {"name": "New Endpoint Test Warehouse"}
+                        """)
                 .when()
-                .post("/api/v1/stock-batches")
+                .post("/api/v1/warehouses")
                 .then()
                 .statusCode(201)
                 .extract().path("id");
@@ -67,6 +66,77 @@ class NewEndpointsTest {
 
     @Test
     @Order(3)
+    void setup_createArea() {
+        areaId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "New Endpoint Test Area"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses/" + warehouseId + "/areas")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(4)
+    void setup_createLocation() {
+        locationId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "New Endpoint Test Location"}
+                        """)
+                .when()
+                .post("/api/v1/areas/" + areaId + "/locations")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(5)
+    void setup_createBatch() {
+        batchId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                            "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
+                            "batchCode": "NEP-BATCH-001",
+                            "quantity": 300
+                        }
+                        """.formatted(productId, locationId))
+                .when()
+                .post("/api/v1/stock-batches")
+                .then()
+                .statusCode(201)
+                .body("quantityCurrent", equalTo(300))
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(6)
+    void setup_createUser() {
+        userId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"email": "nep-test@example.com", "name": "NEP Test User"}
+                        """)
+                .when()
+                .post("/api/v1/users")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(7)
     void setup_createCost() {
         costId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -109,20 +179,22 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(4)
+    @Order(8)
     void setup_createMovement() {
         given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
                         {
-                            "movementType": "ENTRADA",
+                            "movementType": "MANUAL_INIT",
                             "quantity": 100,
-                            "unit": "units",
-                            "notes": "Test stock entry",
+                            "isInbound": true,
+                            "userId": "%s",
+                            "sourceType": "MANUAL",
+                            "reasonDescription": "Test stock entry",
                             "batchQuantities": [{"batchId": "%s", "quantity": 100}]
                         }
-                        """.formatted(batchId))
+                        """.formatted(userId, batchId))
                 .when()
                 .post("/api/v1/stock-movements")
                 .then()
@@ -130,7 +202,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(5)
+    @Order(9)
     void setup_createAndCompleteSale() {
         saleId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -166,7 +238,7 @@ class NewEndpointsTest {
     // --- Cost Analytics Endpoints (Phase 3) ---
 
     @Test
-    @Order(10)
+    @Order(20)
     void costProducts_shouldReturnAggregatedCosts() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -187,7 +259,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(11)
+    @Order(21)
     void costProducts_pagination_shouldWork() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -203,7 +275,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(12)
+    @Order(22)
     void costValuation_shouldReturnSummary() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -217,7 +289,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(13)
+    @Order(23)
     void costTrends_shouldReturnTrendData() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -233,7 +305,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(14)
+    @Order(24)
     void costTrends_withDateRange_shouldFilter() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -249,7 +321,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(15)
+    @Order(25)
     void costTrends_noProduct_shouldReturnEmpty() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -264,7 +336,7 @@ class NewEndpointsTest {
     // --- Analytics Endpoints (Phase 4) ---
 
     @Test
-    @Order(20)
+    @Order(30)
     void analyticsKpis_shouldReturnKpiList() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -281,7 +353,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(21)
+    @Order(31)
     void analyticsKpis_shouldHaveCorrectStructure() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -296,7 +368,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(22)
+    @Order(32)
     void analyticsStockHistory_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -310,7 +382,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(23)
+    @Order(33)
     void analyticsStockHistory_withData_shouldReturnPoints() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -326,7 +398,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(24)
+    @Order(34)
     void analyticsStockHistory_defaultParams_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -337,7 +409,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(25)
+    @Order(35)
     void analyticsSalesSummary_monthly_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -350,7 +422,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(26)
+    @Order(36)
     void analyticsSalesSummary_weekly_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -363,7 +435,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(27)
+    @Order(37)
     void analyticsSalesSummary_default_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -374,7 +446,7 @@ class NewEndpointsTest {
     }
 
     @Test
-    @Order(28)
+    @Order(38)
     void analyticsSalesSummary_withData_shouldReturnPeriods() {
         given()
                 .header("X-Tenant-ID", TENANT)

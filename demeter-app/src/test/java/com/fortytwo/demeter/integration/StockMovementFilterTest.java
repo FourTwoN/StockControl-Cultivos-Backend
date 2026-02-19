@@ -11,7 +11,6 @@ import org.junit.jupiter.api.TestMethodOrder;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -21,13 +20,17 @@ class StockMovementFilterTest {
     private static final String TENANT = "tenant-smf";
 
     private static String productId;
+    private static String warehouseId;
+    private static String areaId;
+    private static String locationId;
     private static String batchId;
-    private static String entradaMovementId;
+    private static String userId;
+    private static String manualInitMovementId;
     private static String ajusteMovementId;
 
     @Test
     @Order(1)
-    void setup_createProductAndBatch() {
+    void setup_createProduct() {
         productId = given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
@@ -39,40 +42,112 @@ class StockMovementFilterTest {
                 .then()
                 .statusCode(201)
                 .extract().path("id");
+    }
 
-        batchId = given()
+    @Test
+    @Order(2)
+    void setup_createWarehouse() {
+        warehouseId = given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
-                        {
-                            "productId": "%s",
-                            "batchCode": "SMF-BATCH",
-                            "quantity": 500,
-                            "unit": "units"
-                        }
-                        """.formatted(productId))
+                        {"name": "Movement Filter Test Warehouse"}
+                        """)
                 .when()
-                .post("/api/v1/stock-batches")
+                .post("/api/v1/warehouses")
                 .then()
                 .statusCode(201)
                 .extract().path("id");
     }
 
     @Test
-    @Order(2)
-    void setup_createMovements() {
-        entradaMovementId = given()
+    @Order(3)
+    void setup_createArea() {
+        areaId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Movement Filter Test Area"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses/" + warehouseId + "/areas")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(4)
+    void setup_createLocation() {
+        locationId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Movement Filter Test Location"}
+                        """)
+                .when()
+                .post("/api/v1/areas/" + areaId + "/locations")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(5)
+    void setup_createBatch() {
+        batchId = given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
                         {
-                            "movementType": "ENTRADA",
+                            "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
+                            "batchCode": "SMF-BATCH",
+                            "quantity": 500
+                        }
+                        """.formatted(productId, locationId))
+                .when()
+                .post("/api/v1/stock-batches")
+                .then()
+                .statusCode(201)
+                .body("quantityCurrent", equalTo(500))
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(6)
+    void setup_createUser() {
+        userId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"email": "smf-test@example.com", "name": "SMF Test User"}
+                        """)
+                .when()
+                .post("/api/v1/users")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(7)
+    void setup_createMovements() {
+        manualInitMovementId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                            "movementType": "MANUAL_INIT",
                             "quantity": 100,
-                            "unit": "units",
-                            "notes": "Initial entry",
+                            "isInbound": true,
+                            "userId": "%s",
+                            "sourceType": "MANUAL",
+                            "reasonDescription": "Initial entry",
                             "batchQuantities": [{"batchId": "%s", "quantity": 100}]
                         }
-                        """.formatted(batchId))
+                        """.formatted(userId, batchId))
                 .when()
                 .post("/api/v1/stock-movements")
                 .then()
@@ -86,11 +161,13 @@ class StockMovementFilterTest {
                         {
                             "movementType": "AJUSTE",
                             "quantity": 50,
-                            "unit": "units",
-                            "notes": "Stock adjustment",
+                            "isInbound": false,
+                            "userId": "%s",
+                            "sourceType": "MANUAL",
+                            "reasonDescription": "Stock adjustment",
                             "batchQuantities": [{"batchId": "%s", "quantity": 50}]
                         }
-                        """.formatted(batchId))
+                        """.formatted(userId, batchId))
                 .when()
                 .post("/api/v1/stock-movements")
                 .then()
@@ -99,21 +176,21 @@ class StockMovementFilterTest {
     }
 
     @Test
-    @Order(3)
+    @Order(8)
     void filterByType_shouldReturnMatchingOnly() {
         given()
                 .header("X-Tenant-ID", TENANT)
-                .queryParam("type", "ENTRADA")
+                .queryParam("type", "MANUAL_INIT")
                 .when()
                 .get("/api/v1/stock-movements")
                 .then()
                 .statusCode(200)
                 .body("content.size()", equalTo(1))
-                .body("content[0].movementType", equalTo("ENTRADA"));
+                .body("content[0].movementType", equalTo("MANUAL_INIT"));
     }
 
     @Test
-    @Order(4)
+    @Order(9)
     void filterByTypeAjuste_shouldReturnAjusteOnly() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -127,7 +204,7 @@ class StockMovementFilterTest {
     }
 
     @Test
-    @Order(5)
+    @Order(10)
     void filterByDateRange_shouldReturnMovementsInRange() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -141,7 +218,7 @@ class StockMovementFilterTest {
     }
 
     @Test
-    @Order(6)
+    @Order(11)
     void filterByFutureDateRange_shouldReturnEmpty() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -155,11 +232,11 @@ class StockMovementFilterTest {
     }
 
     @Test
-    @Order(7)
+    @Order(12)
     void filterByTypeAndDate_shouldCombineFilters() {
         given()
                 .header("X-Tenant-ID", TENANT)
-                .queryParam("type", "ENTRADA")
+                .queryParam("type", "MANUAL_INIT")
                 .queryParam("startDate", "2020-01-01T00:00:00Z")
                 .queryParam("endDate", "2030-12-31T23:59:59Z")
                 .when()
@@ -167,11 +244,11 @@ class StockMovementFilterTest {
                 .then()
                 .statusCode(200)
                 .body("content.size()", equalTo(1))
-                .body("content[0].movementType", equalTo("ENTRADA"));
+                .body("content[0].movementType", equalTo("MANUAL_INIT"));
     }
 
     @Test
-    @Order(8)
+    @Order(13)
     void noFilters_shouldReturnAll() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -183,7 +260,7 @@ class StockMovementFilterTest {
     }
 
     @Test
-    @Order(9)
+    @Order(14)
     void filterByTypeNoMatch_shouldReturnEmpty() {
         given()
                 .header("X-Tenant-ID", TENANT)

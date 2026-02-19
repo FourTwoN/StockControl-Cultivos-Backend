@@ -16,4 +16,18 @@ public class StockBatchMovementRepository implements PanacheRepositoryBase<Stock
     public List<StockBatchMovement> findByMovementId(UUID movementId) {
         return find("movement.id", movementId).list();
     }
+
+    /**
+     * Find all batch-movements where this batch was the cycle initiator.
+     */
+    public List<StockBatchMovement> findCycleInitiatorsByBatch(UUID batchId) {
+        return find("batch.id = ?1 AND isCycleInitiator = true", batchId).list();
+    }
+
+    /**
+     * Find batch-movements ordered by movementOrder for a given movement.
+     */
+    public List<StockBatchMovement> findByMovementIdOrdered(UUID movementId) {
+        return find("movement.id = ?1 ORDER BY movementOrder", movementId).list();
+    }
 }

@@ -180,6 +180,96 @@ public record ProductResponse(
 
 ---
 
+## Photo → Stock Update Flow (ML Integration)
+
+The system automatically updates inventory when ML Worker processes photos. This is the core ML → Stock integration.
+
+### Flow Overview
+
+```
+ML Worker                           Backend
+    │                                  │
+    │  POST /processing-callback/      │
+    │  results                         │
+    └─────────────────────────────────▶│
+                                       │
+                    ┌──────────────────┴──────────────────┐
+                    │ ProcessingResultService (demeter-fotos) │
+                    └──────────────────┬──────────────────┘
+                                       │
+              ┌────────────────────────┴────────────────────────┐
+              │ PHASE A: Persist ML Results (demeter-fotos)     │
+              │   - Classifications                             │
+              │   - Detections                                  │
+              │   - Estimations                                 │
+              │   - Update session status                       │
+              └────────────────────────┬────────────────────────┘
+                                       │
+              ┌────────────────────────┴────────────────────────┐
+              │ StockUpdateOrchestrator (demeter-app)           │
+              │   - Get StorageLocationConfigs                  │
+              │   - Extract COUNT from estimations              │
+              └────────────────────────┬────────────────────────┘
+                                       │
+              ┌────────────────────────┴────────────────────────┐
+              │ PHASE B: Stock Impact (demeter-inventario)      │
+              │   - StockBatchService.startNewCycle()           │
+              │   - Auto-detect sales (qty decreased)           │
+              │   - Create FOTO movement                        │
+              └────────────────────────────────────────────────┘
+```
+
+### Cycle Management
+
+Stock batches use cycle-based tracking:
+
+```java
+// Active batch: cycleEndDate IS NULL
+// One active batch per (location, product, state, size, packaging)
+
+// When ML detects new quantity:
+// 1. If qty decreased → auto-create VENTA movement
+// 2. Close old batch (set cycleEndDate)
+// 3. Create new batch with cycleNumber++
+```
+
+### Key Services
+
+| Service | Module | Purpose |
+|---------|--------|---------|
+| `ProcessingResultService` | demeter-fotos | Entry point for ML callback |
+| `StockUpdateOrchestrator` | demeter-app | Bridges fotos → inventario |
+| `StockBatchService.startNewCycle()` | demeter-inventario | Cycle management + auto-sales |
+| `StorageLocationConfigService` | demeter-ubicaciones | Product/packaging config per location |
+
+### Movement Types
+
+```java
+public enum MovementType {
+    FOTO,           // ML photo-based initialization
+    MANUAL_INIT,    // Manual stock initialization
+    MUERTE,         // Plant death (loss)
+    PLANTADO,       // New planting
+    MOVIMIENTO,     // Location change
+    TRASPLANTE,     // Config change
+    AJUSTE,         // Manual adjustment
+    VENTA           // Sale (auto-calculated from qty decrease)
+}
+```
+
+### M:N Relationship
+
+One FOTO movement → N batches (via `StockBatchMovement` junction table):
+
+```
+StockMovement (type=FOTO)
+    ├── StockBatchMovement (batch=A, cycleInitiator=true)
+    ├── StockBatchMovement (batch=B, cycleInitiator=true)
+    └── StockBatchMovement (batch=C, cycleInitiator=true)
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -282,3 +372,13 @@ In dev mode (`%dev`), Cloud Tasks is disabled and logs tasks without creating th
 | `BaseEntity.java` | Base class with id, tenantId, timestamps |
 | `DemeterTenantResolver.java` | Extracts tenant from JWT/header |
 | `RlsConnectionCustomizer.java` | Sets RLS context on each connection |
+
+### Photo → Stock Flow (Key Files)
+
+| File | Module | Purpose |
+|------|--------|---------|
+| `StockUpdateOrchestrator.java` | demeter-app | Bridges fotos → inventario modules |
+| `StockBatchService.java` | demeter-inventario | Cycle management with `startNewCycle()` |
+| `StorageLocationConfigService.java` | demeter-ubicaciones | Product config per location |
+| `ProcessingResultService.java` | demeter-fotos | ML callback entry point |
+| `V8-V15 migrations` | db/migration | Photo → stock schema changes |

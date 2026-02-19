@@ -36,12 +36,15 @@ public class SaleCompletionService {
 
             var request = new CreateStockMovementRequest(
                     "VENTA",
-                    item.getQuantity(),
-                    null,
-                    sale.getId(),
-                    "SALE",
-                    "Sale " + sale.getSaleNumber(),
+                    item.getQuantity().intValue(),
+                    false,  // isInbound = false for sales
                     sale.getSoldBy(),
+                    "MANUAL",
+                    "Sale " + sale.getSaleNumber(),
+                    null,  // processingSessionId
+                    null,  // parentMovementId
+                    item.getUnitPrice(),
+                    item.getSubtotal(),
                     Instant.now(),
                     List.of(batchQuantity)
             );

@@ -10,7 +10,6 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.notNullValue;
 
 /**
@@ -26,7 +25,11 @@ class SaleFlowTest {
     private static final String TENANT = "tenant-sale-flow";
 
     private static String productId;
+    private static String warehouseId;
+    private static String areaId;
+    private static String locationId;
     private static String batchId;
+    private static String userId;
     private static String saleId;
     private static String cancelTestSaleId;
 
@@ -48,6 +51,54 @@ class SaleFlowTest {
 
     @Test
     @Order(2)
+    void setup_createWarehouse() {
+        warehouseId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Sale Flow Warehouse"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(3)
+    void setup_createArea() {
+        areaId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Sale Flow Area"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses/" + warehouseId + "/areas")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(4)
+    void setup_createLocation() {
+        locationId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Sale Flow Location"}
+                        """)
+                .when()
+                .post("/api/v1/areas/" + areaId + "/locations")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(5)
     void setup_createStockBatch() {
         batchId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -55,21 +106,38 @@ class SaleFlowTest {
                 .body("""
                         {
                             "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
                             "batchCode": "SALE-BATCH-001",
-                            "quantity": 100,
-                            "unit": "units"
+                            "quantity": 100
                         }
-                        """.formatted(productId))
+                        """.formatted(productId, locationId))
                 .when()
                 .post("/api/v1/stock-batches")
                 .then()
                 .statusCode(201)
-                .body("quantity", equalTo(100))
+                .body("quantityCurrent", equalTo(100))
                 .extract().path("id");
     }
 
     @Test
-    @Order(3)
+    @Order(6)
+    void setup_createUser() {
+        userId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"email": "sale-flow-test@example.com", "name": "Sale Flow Test User"}
+                        """)
+                .when()
+                .post("/api/v1/users")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(7)
     void createSale_shouldReturn201() {
         saleId = given()
                 .header("X-Tenant-ID", TENANT)
@@ -78,6 +146,7 @@ class SaleFlowTest {
                         {
                             "customerName": "John Doe",
                             "customerEmail": "john@example.com",
+                            "soldBy": "%s",
                             "notes": "Integration test sale",
                             "items": [
                                 {
@@ -88,7 +157,7 @@ class SaleFlowTest {
                                 }
                             ]
                         }
-                        """.formatted(productId, batchId))
+                        """.formatted(userId, productId, batchId))
                 .when()
                 .post("/api/v1/sales")
                 .then()
@@ -106,7 +175,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(4)
+    @Order(8)
     void getSale_shouldReturnCreated() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -120,7 +189,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(5)
+    @Order(9)
     void updateSale_shouldModifyCustomerInfo() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -140,7 +209,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(6)
+    @Order(10)
     void completeSale_shouldChangeStatusToCompleted() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -153,7 +222,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(7)
+    @Order(11)
     void cancelCompletedSale_shouldFail() {
         // Attempting to cancel a COMPLETED sale should fail
         given()
@@ -166,7 +235,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(8)
+    @Order(12)
     void completeAlreadyCompletedSale_shouldFail() {
         // Attempting to complete an already COMPLETED sale should fail
         given()
@@ -179,15 +248,16 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(9)
+    @Order(13)
     void cancelPendingSale_shouldSucceed() {
-        // Create a new sale that we will cancel
+        // Create a new sale that we will cancel (no soldBy needed since we won't complete it)
         cancelTestSaleId = given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
                         {
                             "customerName": "Cancel Customer",
+                            "soldBy": "%s",
                             "items": [
                                 {
                                     "productId": "%s",
@@ -197,7 +267,7 @@ class SaleFlowTest {
                                 }
                             ]
                         }
-                        """.formatted(productId, batchId))
+                        """.formatted(userId, productId, batchId))
                 .when()
                 .post("/api/v1/sales")
                 .then()
@@ -217,7 +287,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(10)
+    @Order(14)
     void completeCancelledSale_shouldFail() {
         // Attempting to complete a CANCELLED sale should fail
         given()
@@ -230,7 +300,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(11)
+    @Order(15)
     void listSales_shouldReturnPaged() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -243,7 +313,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(12)
+    @Order(16)
     void createSale_emptyItems_shouldReturn400() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -261,7 +331,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(13)
+    @Order(17)
     void createSaleWithMultipleItems_shouldCalculateTotal() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -269,6 +339,7 @@ class SaleFlowTest {
                 .body("""
                         {
                             "customerName": "Multi Item Customer",
+                            "soldBy": "%s",
                             "items": [
                                 {
                                     "productId": "%s",
@@ -284,7 +355,7 @@ class SaleFlowTest {
                                 }
                             ]
                         }
-                        """.formatted(productId, batchId, productId, batchId))
+                        """.formatted(userId, productId, batchId, productId, batchId))
                 .when()
                 .post("/api/v1/sales")
                 .then()
@@ -294,7 +365,7 @@ class SaleFlowTest {
     }
 
     @Test
-    @Order(14)
+    @Order(18)
     void deleteSale_shouldReturn204() {
         // Create a sale to delete
         String deleteSaleId = given()
@@ -303,6 +374,7 @@ class SaleFlowTest {
                 .body("""
                         {
                             "customerName": "Delete Customer",
+                            "soldBy": "%s",
                             "items": [
                                 {
                                     "productId": "%s",
@@ -311,7 +383,7 @@ class SaleFlowTest {
                                 }
                             ]
                         }
-                        """.formatted(productId))
+                        """.formatted(userId, productId))
                 .when()
                 .post("/api/v1/sales")
                 .then()

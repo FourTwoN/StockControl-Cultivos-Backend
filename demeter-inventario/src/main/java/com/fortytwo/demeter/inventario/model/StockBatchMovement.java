@@ -1,46 +1,45 @@
 package com.fortytwo.demeter.inventario.model;
 
+import com.fortytwo.demeter.common.model.BaseEntity;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.UUID;
 
+/**
+ * Junction table linking movements to affected batches.
+ * One movement can affect multiple batches (M:N relationship).
+ */
 @Entity
 @Table(name = "stock_batch_movements")
-public class StockBatchMovement {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "batch_id", nullable = false)
-    private StockBatch batch;
+public class StockBatchMovement extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "movement_id", nullable = false)
     private StockMovement movement;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id", nullable = false)
+    private StockBatch batch;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal quantity;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
+    @Column(name = "is_cycle_initiator")
+    private boolean isCycleInitiator = false;
 
-    @PrePersist
-    void prePersist() {
-        this.createdAt = Instant.now();
-    }
+    @Column(name = "movement_order")
+    private Integer movementOrder;
 
     // Getters
-    public UUID getId() { return id; }
-    public StockBatch getBatch() { return batch; }
     public StockMovement getMovement() { return movement; }
+    public StockBatch getBatch() { return batch; }
     public BigDecimal getQuantity() { return quantity; }
-    public Instant getCreatedAt() { return createdAt; }
+    public boolean isCycleInitiator() { return isCycleInitiator; }
+    public Integer getMovementOrder() { return movementOrder; }
 
     // Setters
-    public void setBatch(StockBatch batch) { this.batch = batch; }
     public void setMovement(StockMovement movement) { this.movement = movement; }
+    public void setBatch(StockBatch batch) { this.batch = batch; }
     public void setQuantity(BigDecimal quantity) { this.quantity = quantity; }
+    public void setCycleInitiator(boolean cycleInitiator) { isCycleInitiator = cycleInitiator; }
+    public void setMovementOrder(Integer movementOrder) { this.movementOrder = movementOrder; }
 }

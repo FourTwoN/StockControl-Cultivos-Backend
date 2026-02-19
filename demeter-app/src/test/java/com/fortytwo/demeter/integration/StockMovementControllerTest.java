@@ -21,7 +21,11 @@ class StockMovementControllerTest {
     private static final String TENANT = "tenant-stock-mvmt";
 
     private static String productId;
+    private static String warehouseId;
+    private static String areaId;
+    private static String locationId;
     private static String batchId;
+    private static String userId;
     private static String movementId;
 
     @Test
@@ -42,20 +46,15 @@ class StockMovementControllerTest {
 
     @Test
     @Order(2)
-    void setup_createBatch() {
-        batchId = given()
+    void setup_createWarehouse() {
+        warehouseId = given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
-                        {
-                            "productId": "%s",
-                            "batchCode": "MVMT-BATCH-001",
-                            "quantity": 200,
-                            "unit": "kg"
-                        }
-                        """.formatted(productId))
+                        {"name": "Movement Test Warehouse"}
+                        """)
                 .when()
-                .post("/api/v1/stock-batches")
+                .post("/api/v1/warehouses")
                 .then()
                 .statusCode(201)
                 .extract().path("id");
@@ -63,16 +62,89 @@ class StockMovementControllerTest {
 
     @Test
     @Order(3)
+    void setup_createArea() {
+        areaId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Movement Test Area"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses/" + warehouseId + "/areas")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(4)
+    void setup_createLocation() {
+        locationId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Movement Test Location"}
+                        """)
+                .when()
+                .post("/api/v1/areas/" + areaId + "/locations")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(5)
+    void setup_createBatch() {
+        batchId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                            "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
+                            "batchCode": "MVMT-BATCH-001",
+                            "quantity": 200
+                        }
+                        """.formatted(productId, locationId))
+                .when()
+                .post("/api/v1/stock-batches")
+                .then()
+                .statusCode(201)
+                .body("quantityCurrent", equalTo(200))
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(6)
+    void setup_createUser() {
+        userId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"email": "mvmt-test@example.com", "name": "Movement Test User"}
+                        """)
+                .when()
+                .post("/api/v1/users")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(7)
     void createEntradaMovement_shouldReturn201() {
         movementId = given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
                         {
-                            "movementType": "ENTRADA",
+                            "movementType": "MANUAL_INIT",
                             "quantity": 50,
-                            "unit": "kg",
-                            "notes": "Initial stock",
+                            "isInbound": true,
+                            "userId": "%s",
+                            "sourceType": "MANUAL",
+                            "reasonDescription": "Initial stock entry",
                             "batchQuantities": [
                                 {
                                     "batchId": "%s",
@@ -80,20 +152,19 @@ class StockMovementControllerTest {
                                 }
                             ]
                         }
-                        """.formatted(batchId))
+                        """.formatted(userId, batchId))
                 .when()
                 .post("/api/v1/stock-movements")
                 .then()
                 .statusCode(201)
                 .body("id", notNullValue())
-                .body("movementType", equalTo("ENTRADA"))
+                .body("movementType", equalTo("MANUAL_INIT"))
                 .body("quantity", equalTo(50))
-                .body("unit", equalTo("kg"))
                 .extract().path("id");
     }
 
     @Test
-    @Order(4)
+    @Order(8)
     void getMovement_shouldReturn200() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -102,12 +173,11 @@ class StockMovementControllerTest {
                 .then()
                 .statusCode(200)
                 .body("id", equalTo(movementId))
-                .body("movementType", equalTo("ENTRADA"))
-                .body("notes", equalTo("Initial stock"));
+                .body("movementType", equalTo("MANUAL_INIT"));
     }
 
     @Test
-    @Order(5)
+    @Order(9)
     void listMovements_shouldReturnPaged() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -123,19 +193,19 @@ class StockMovementControllerTest {
     }
 
     @Test
-    @Order(6)
+    @Order(10)
     void getByType_shouldReturn() {
         given()
                 .header("X-Tenant-ID", TENANT)
                 .when()
-                .get("/api/v1/stock-movements/by-type/ENTRADA")
+                .get("/api/v1/stock-movements/by-type/MANUAL_INIT")
                 .then()
                 .statusCode(200)
                 .body("size()", greaterThanOrEqualTo(1));
     }
 
     @Test
-    @Order(7)
+    @Order(11)
     void getByDateRange_shouldReturn() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -148,7 +218,7 @@ class StockMovementControllerTest {
     }
 
     @Test
-    @Order(8)
+    @Order(12)
     void getByReference_shouldReturnEmpty() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -160,14 +230,14 @@ class StockMovementControllerTest {
     }
 
     @Test
-    @Order(9)
+    @Order(13)
     void createMovement_missingRequired_shouldReturn400() {
         given()
                 .header("X-Tenant-ID", TENANT)
                 .contentType(ContentType.JSON)
                 .body("""
                         {
-                            "notes": "Missing fields"
+                            "reasonDescription": "Missing required fields"
                         }
                         """)
                 .when()

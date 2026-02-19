@@ -10,9 +10,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -23,6 +21,9 @@ class StockBatchFilterTest {
 
     private static String productIdA;
     private static String productIdB;
+    private static String warehouseId;
+    private static String areaId;
+    private static String locationId;
     private static String batchIdA;
     private static String batchIdB;
 
@@ -56,6 +57,54 @@ class StockBatchFilterTest {
 
     @Test
     @Order(2)
+    void setup_createWarehouse() {
+        warehouseId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Filter Test Warehouse"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(3)
+    void setup_createArea() {
+        areaId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Filter Test Area"}
+                        """)
+                .when()
+                .post("/api/v1/warehouses/" + warehouseId + "/areas")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(4)
+    void setup_createLocation() {
+        locationId = given()
+                .header("X-Tenant-ID", TENANT)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {"name": "Filter Test Location"}
+                        """)
+                .when()
+                .post("/api/v1/areas/" + areaId + "/locations")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    @Test
+    @Order(5)
     void setup_createBatches() {
         batchIdA = given()
                 .header("X-Tenant-ID", TENANT)
@@ -63,11 +112,12 @@ class StockBatchFilterTest {
                 .body("""
                         {
                             "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
                             "batchCode": "SBF-BATCH-A",
-                            "quantity": 100,
-                            "unit": "kg"
+                            "quantity": 100
                         }
-                        """.formatted(productIdA))
+                        """.formatted(productIdA, locationId))
                 .when()
                 .post("/api/v1/stock-batches")
                 .then()
@@ -80,11 +130,12 @@ class StockBatchFilterTest {
                 .body("""
                         {
                             "productId": "%s",
+                            "storageLocationId": "%s",
+                            "productState": "ACTIVE",
                             "batchCode": "SBF-BATCH-B",
-                            "quantity": 50,
-                            "unit": "lbs"
+                            "quantity": 50
                         }
-                        """.formatted(productIdB))
+                        """.formatted(productIdB, locationId))
                 .when()
                 .post("/api/v1/stock-batches")
                 .then()
@@ -93,7 +144,7 @@ class StockBatchFilterTest {
     }
 
     @Test
-    @Order(3)
+    @Order(6)
     void setup_depleteBatchB() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -109,7 +160,7 @@ class StockBatchFilterTest {
     }
 
     @Test
-    @Order(4)
+    @Order(7)
     void filterByProductId_shouldReturnOnlyMatchingBatches() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -124,7 +175,7 @@ class StockBatchFilterTest {
     }
 
     @Test
-    @Order(5)
+    @Order(8)
     void filterByStatus_shouldReturnOnlyMatchingStatus() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -138,7 +189,7 @@ class StockBatchFilterTest {
     }
 
     @Test
-    @Order(6)
+    @Order(9)
     void filterByStatusDepleted_shouldReturnDepletedOnly() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -153,7 +204,7 @@ class StockBatchFilterTest {
     }
 
     @Test
-    @Order(7)
+    @Order(10)
     void filterByProductIdAndStatus_shouldCombineFilters() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -169,7 +220,7 @@ class StockBatchFilterTest {
     }
 
     @Test
-    @Order(8)
+    @Order(11)
     void filterByProductIdAndWrongStatus_shouldReturnEmpty() {
         given()
                 .header("X-Tenant-ID", TENANT)
@@ -183,7 +234,7 @@ class StockBatchFilterTest {
     }
 
     @Test
-    @Order(9)
+    @Order(12)
     void noFilters_shouldReturnAll() {
         given()
                 .header("X-Tenant-ID", TENANT)
