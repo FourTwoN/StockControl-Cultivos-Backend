@@ -32,6 +32,12 @@ public class StorageLocationService {
             .orElseThrow(() -> new EntityNotFoundException("StorageArea", areaId));
         StorageLocation l = new StorageLocation();
         l.setArea(area);
+        // Auto-generate code if not provided
+        String code = req.code();
+        if (code == null || code.isBlank()) {
+            code = "LOC-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        }
+        l.setCode(code.toUpperCase());
         l.setName(req.name());
         l.setDescription(req.description());
         locationRepository.persist(l);
@@ -52,5 +58,6 @@ public class StorageLocationService {
         StorageLocation l = locationRepository.findByIdOptional(id)
             .orElseThrow(() -> new EntityNotFoundException("StorageLocation", id));
         l.setDeletedAt(Instant.now());
+        l.setActive(false);
     }
 }

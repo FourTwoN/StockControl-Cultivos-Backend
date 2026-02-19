@@ -19,6 +19,7 @@ import com.fortytwo.demeter.productos.model.ProductState;
 import com.fortytwo.demeter.ubicaciones.model.StorageLocationConfig;
 import com.fortytwo.demeter.ubicaciones.service.StorageLocationConfigService;
 import com.fortytwo.demeter.usuarios.repository.UserRepository;
+import com.fortytwo.demeter.app.map.service.MapViewService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -70,6 +71,9 @@ public class StockUpdateOrchestrator {
 
     @Inject
     UserRepository userRepository;
+
+    @Inject
+    MapViewService mapViewService;
 
     /**
      * Result of stock update orchestration.
@@ -172,6 +176,10 @@ public class StockUpdateOrchestrator {
         }
 
         List<UUID> newBatchIds = newBatches.stream().map(StockBatch::getId).toList();
+
+        // Invalidate map cache after stock update
+        mapViewService.invalidateMapCache();
+
         return new StockUpdateResult(newBatches.size(), totalSales, newBatchIds, fotoMovementId);
     }
 

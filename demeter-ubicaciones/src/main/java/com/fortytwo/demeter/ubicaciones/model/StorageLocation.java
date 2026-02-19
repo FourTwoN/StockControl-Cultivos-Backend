@@ -14,8 +14,14 @@ public class StorageLocation extends BaseEntity {
     @JoinColumn(name = "area_id", nullable = false)
     private StorageArea area;
 
+    @Column(length = 50, nullable = false)
+    private String code;
+
     @Column(nullable = false)
     private String name;
+
+    @Column(nullable = false)
+    private boolean active = true;
 
     @Column(columnDefinition = "TEXT")
     private String description;
@@ -28,14 +34,18 @@ public class StorageLocation extends BaseEntity {
 
     // Getters
     public StorageArea getArea() { return area; }
+    public String getCode() { return code; }
     public String getName() { return name; }
+    public boolean isActive() { return active; }
     public String getDescription() { return description; }
     public Instant getDeletedAt() { return deletedAt; }
     public List<StorageBin> getBins() { return bins; }
 
     // Setters
     public void setArea(StorageArea area) { this.area = area; }
+    public void setCode(String code) { this.code = code; }
     public void setName(String name) { this.name = name; }
+    public void setActive(boolean active) { this.active = active; }
     public void setDescription(String description) { this.description = description; }
     public void setDeletedAt(Instant deletedAt) { this.deletedAt = deletedAt; }
 }

@@ -31,6 +31,12 @@ public class WarehouseService {
     @Transactional
     public WarehouseDTO create(CreateWarehouseRequest req) {
         Warehouse w = new Warehouse();
+        // Auto-generate code if not provided
+        String code = req.code();
+        if (code == null || code.isBlank()) {
+            code = "WH-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        }
+        w.setCode(code.toUpperCase());
         w.setName(req.name());
         w.setAddress(req.address());
         w.setLatitude(req.latitude());

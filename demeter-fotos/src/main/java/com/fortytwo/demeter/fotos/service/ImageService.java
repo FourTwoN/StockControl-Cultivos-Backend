@@ -15,7 +15,7 @@ import com.fortytwo.demeter.fotos.repository.ClassificationRepository;
 import com.fortytwo.demeter.fotos.repository.DetectionRepository;
 import com.fortytwo.demeter.fotos.repository.ImageRepository;
 import com.fortytwo.demeter.fotos.repository.PhotoProcessingSessionRepository;
-import com.fortytwo.demeter.fotos.storage.ImageStorageService;
+import com.fortytwo.demeter.fotos.storage.StorageService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -51,7 +51,7 @@ public class ImageService {
     TenantContext tenantContext;
 
     @Inject
-    ImageStorageService storageService;
+    StorageService storageService;
 
     @ConfigProperty(name = "demeter.storage.url-expiration-minutes", defaultValue = "60")
     int urlExpirationMinutes;

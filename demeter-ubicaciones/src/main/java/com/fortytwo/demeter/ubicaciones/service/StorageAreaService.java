@@ -32,8 +32,15 @@ public class StorageAreaService {
             .orElseThrow(() -> new EntityNotFoundException("Warehouse", warehouseId));
         StorageArea a = new StorageArea();
         a.setWarehouse(warehouse);
+        // Auto-generate code if not provided
+        String code = req.code();
+        if (code == null || code.isBlank()) {
+            code = "AREA-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        }
+        a.setCode(code.toUpperCase());
         a.setName(req.name());
         a.setDescription(req.description());
+        a.setPosition(req.position());
         areaRepository.persist(a);
         return StorageAreaDTO.from(a);
     }
@@ -52,5 +59,6 @@ public class StorageAreaService {
         StorageArea a = areaRepository.findByIdOptional(id)
             .orElseThrow(() -> new EntityNotFoundException("StorageArea", id));
         a.setDeletedAt(Instant.now());
+        a.setActive(false);
     }
 }

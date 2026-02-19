@@ -1,10 +1,13 @@
 package com.fortytwo.demeter.fotos.storage;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
- * Abstract interface for image storage operations.
+ * Abstract interface for cloud storage operations.
  *
  * <p>Implementations can target different storage backends:
  * <ul>
@@ -14,31 +17,57 @@ import java.util.Optional;
  * </ul>
  *
  * <p>This abstraction allows switching storage providers via configuration
- * without changing application code.
+ * without changing application code. Despite the name, this service handles
+ * all types of files, not just images.
  */
-public interface ImageStorageService {
+public interface StorageService {
 
     /**
-     * Upload image data to storage.
+     * Upload data to storage.
      *
-     * @param data        Image bytes
+     * @param data        File bytes
      * @param path        Storage path (e.g., "sessions/{sessionId}/images/{imageId}.jpg")
-     * @param contentType MIME type (e.g., "image/jpeg")
-     * @return Storage URL or path that can be used to retrieve the image
+     * @param contentType MIME type (e.g., "image/jpeg", "application/pdf")
+     * @return Storage URL or path that can be used to retrieve the file
      */
     String upload(byte[] data, String path, String contentType);
 
     /**
-     * Generate a signed URL for reading an image.
+     * Generate a signed URL for reading a file.
      *
      * <p>The URL will be valid for the specified duration and can be used
-     * directly in browser (e.g., in img src attribute).
+     * directly in browser (e.g., in img src attribute or download link).
      *
      * @param storagePath Path returned from upload()
      * @param expiration  How long the URL should be valid
      * @return Signed URL for direct browser access
      */
     String generateReadUrl(String storagePath, Duration expiration);
+
+    /**
+     * Generate signed URLs for multiple files in batch.
+     *
+     * <p>Default implementation calls {@link #generateReadUrl} sequentially.
+     * Implementations may override for parallel processing.
+     *
+     * @param storagePaths List of paths returned from upload()
+     * @param expiration   How long the URLs should be valid
+     * @return Map of storage path to signed URL
+     */
+    default Map<String, String> generateReadUrlsBatch(List<String> storagePaths, Duration expiration) {
+        return storagePaths.stream()
+                .collect(Collectors.toMap(
+                        path -> path,
+                        path -> {
+                            try {
+                                return generateReadUrl(path, expiration);
+                            } catch (Exception e) {
+                                // Return empty string for failed URLs - caller should handle
+                                return "";
+                            }
+                        }
+                ));
+    }
 
     /**
      * Generate a signed URL for uploading directly to storage.
@@ -54,15 +83,15 @@ public interface ImageStorageService {
     String generateUploadUrl(String path, String contentType, Duration expiration);
 
     /**
-     * Download image data from storage.
+     * Download file data from storage.
      *
      * @param storagePath Path returned from upload()
-     * @return Image bytes, or empty if not found
+     * @return File bytes, or empty if not found
      */
     Optional<byte[]> download(String storagePath);
 
     /**
-     * Delete an image from storage.
+     * Delete a file from storage.
      *
      * @param storagePath Path returned from upload()
      * @return true if deleted, false if not found
@@ -70,7 +99,7 @@ public interface ImageStorageService {
     boolean delete(String storagePath);
 
     /**
-     * Check if an image exists in storage.
+     * Check if a file exists in storage.
      *
      * @param storagePath Path to check
      * @return true if exists

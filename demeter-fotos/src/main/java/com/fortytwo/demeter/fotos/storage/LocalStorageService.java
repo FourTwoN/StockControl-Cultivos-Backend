@@ -21,8 +21,8 @@ import java.util.Optional;
  * <p>This implementation is only active in the "dev" profile.
  */
 @ApplicationScoped
-@IfBuildProfile("dev")
-public class LocalStorageService implements ImageStorageService {
+@IfBuildProfile(anyOf = {"dev", "test"})
+public class LocalStorageService implements StorageService {
 
     private static final Logger log = Logger.getLogger(LocalStorageService.class);
 

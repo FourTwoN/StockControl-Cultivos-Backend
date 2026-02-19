@@ -54,6 +54,7 @@ dependencies {
 
     implementation("io.quarkus:quarkus-arc")
     implementation("io.quarkus:quarkus-smallrye-health")
+    implementation("io.quarkus:quarkus-cache")
 
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.quarkus:quarkus-test-security")

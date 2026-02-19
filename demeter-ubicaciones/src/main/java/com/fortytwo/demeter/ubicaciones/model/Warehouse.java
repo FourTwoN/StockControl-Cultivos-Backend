@@ -11,6 +11,9 @@ import java.util.List;
 @Table(name = "warehouses")
 public class Warehouse extends BaseEntity {
 
+    @Column(length = 50, nullable = false)
+    private String code;
+
     @Column(nullable = false)
     private String name;
 
@@ -33,6 +36,7 @@ public class Warehouse extends BaseEntity {
     private List<StorageArea> areas = new ArrayList<>();
 
     // Getters
+    public String getCode() { return code; }
     public String getName() { return name; }
     public String getAddress() { return address; }
     public BigDecimal getLatitude() { return latitude; }
@@ -42,6 +46,7 @@ public class Warehouse extends BaseEntity {
     public List<StorageArea> getAreas() { return areas; }
 
     // Setters
+    public void setCode(String code) { this.code = code; }
     public void setName(String name) { this.name = name; }
     public void setAddress(String address) { this.address = address; }
     public void setLatitude(BigDecimal latitude) { this.latitude = latitude; }

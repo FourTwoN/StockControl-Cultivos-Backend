@@ -270,6 +270,53 @@ StockMovement (type=FOTO)
 
 ---
 
+## Map View Feature
+
+The MAP feature provides a hierarchical view of warehouses, areas, and locations with photo-based stock metrics for visualization.
+
+### API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/v1/map/bulk-load` | Full hierarchy with preview metrics (cached) |
+| GET | `/api/v1/map/locations/{id}/detail` | Location detail with latest session |
+| GET | `/api/v1/map/locations/{id}/history` | Paginated photo history |
+| POST | `/api/v1/map/presigned-urls` | Batch URL generation for lazy loading |
+
+### Performance Optimizations
+
+1. **Single Native Query** - Uses PostgreSQL CTEs to fetch entire hierarchy in one query (avoids N+1)
+2. **Tenant-aware Caching** - 5-minute TTL with explicit invalidation on photo processing
+3. **Lazy Loading** - Presigned URLs generated on-demand, not in bulk response
+
+### Key Components
+
+| File | Purpose |
+|------|---------|
+| `MapController.java` | REST endpoints in demeter-app |
+| `MapViewService.java` | Business logic + caching |
+| `MapViewRepository.java` | Native queries with CTEs |
+| `StorageService.java` | Cloud storage abstraction (demeter-fotos) |
+
+### Cache Invalidation
+
+The map cache is automatically invalidated when photo processing completes:
+
+```java
+// In StockUpdateOrchestrator.processStockUpdate()
+mapViewService.invalidateMapCache();
+```
+
+### Location Preview Metrics
+
+Each location includes aggregated data from the latest photo session:
+- `currentQuantity` / `previousQuantity` - For change calculation
+- `daysWithoutUpdate` - Days since last photo
+- `totalCactus`, `totalSuculentas`, `totalInjertos` - Category breakdown
+- `qualityScore` - ML confidence score
+
+---
+
 ## Project Structure
 
 ```
@@ -382,3 +429,12 @@ In dev mode (`%dev`), Cloud Tasks is disabled and logs tasks without creating th
 | `StorageLocationConfigService.java` | demeter-ubicaciones | Product config per location |
 | `ProcessingResultService.java` | demeter-fotos | ML callback entry point |
 | `V8-V15 migrations` | db/migration | Photo → stock schema changes |
+
+### Map View (Key Files)
+
+| File | Module | Purpose |
+|------|--------|---------|
+| `MapController.java` | demeter-app | REST endpoints for map visualization |
+| `MapViewService.java` | demeter-app | Business logic with caching |
+| `MapViewRepository.java` | demeter-app | Native queries with CTEs |
+| `StorageService.java` | demeter-fotos | Cloud storage abstraction (GCS/S3/local) |

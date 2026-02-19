@@ -30,8 +30,8 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  */
 @ApplicationScoped
-@UnlessBuildProfile("dev")
-public class GcsStorageService implements ImageStorageService {
+@UnlessBuildProfile(anyOf = {"dev", "test"})
+public class GcsStorageService implements StorageService {
 
     private static final Logger log = Logger.getLogger(GcsStorageService.class);
 

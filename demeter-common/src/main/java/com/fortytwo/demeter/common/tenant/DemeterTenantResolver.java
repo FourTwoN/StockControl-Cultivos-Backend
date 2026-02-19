@@ -1,5 +1,6 @@
 package com.fortytwo.demeter.common.tenant;
 
+import io.quarkus.hibernate.orm.PersistenceUnitExtension;
 import io.quarkus.hibernate.orm.runtime.tenant.TenantResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -7,6 +8,7 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 import io.vertx.ext.web.RoutingContext;
 
 @ApplicationScoped
+@PersistenceUnitExtension
 public class DemeterTenantResolver implements TenantResolver {
 
     private static final String DEFAULT_TENANT = "default";
