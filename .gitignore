@@ -26,3 +26,6 @@ quarkus-app/
 
 # Test
 target/
+
+# Docs
+docs/

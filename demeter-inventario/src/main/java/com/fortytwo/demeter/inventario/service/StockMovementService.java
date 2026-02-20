@@ -3,8 +3,9 @@ package com.fortytwo.demeter.inventario.service;
 import com.fortytwo.demeter.common.dto.PagedResponse;
 import com.fortytwo.demeter.common.exception.EntityNotFoundException;
 import com.fortytwo.demeter.fotos.repository.PhotoProcessingSessionRepository;
-import com.fortytwo.demeter.inventario.dto.CreateStockMovementRequest;
-import com.fortytwo.demeter.inventario.dto.StockMovementDTO;
+import com.fortytwo.demeter.inventario.dto.*;
+import com.fortytwo.demeter.inventario.exception.InactiveBatchException;
+import com.fortytwo.demeter.inventario.exception.InsufficientStockException;
 import com.fortytwo.demeter.inventario.model.BatchStatus;
 import com.fortytwo.demeter.inventario.model.MovementType;
 import com.fortytwo.demeter.inventario.model.SourceType;
@@ -14,6 +15,7 @@ import com.fortytwo.demeter.inventario.model.StockMovement;
 import com.fortytwo.demeter.inventario.repository.StockBatchMovementRepository;
 import com.fortytwo.demeter.inventario.repository.StockBatchRepository;
 import com.fortytwo.demeter.inventario.repository.StockMovementRepository;
+import com.fortytwo.demeter.usuarios.model.User;
 import com.fortytwo.demeter.usuarios.repository.UserRepository;
 import io.quarkus.panache.common.Page;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -25,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -162,5 +165,279 @@ public class StockMovementService {
             batch.setStatus(BatchStatus.DEPLETED);
             log.info("Batch {} depleted after movement", batch.getBatchCode());
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // VALIDATION HELPERS
+    // ═══════════════════════════════════════════════════════════════
+
+    private void validateBatchIsActive(StockBatch batch) {
+        if (!batch.isActive()) {
+            throw new InactiveBatchException(batch.getId(), batch.getCycleNumber());
+        }
+    }
+
+    private void validateSufficientStock(StockBatch batch, int requested) {
+        if (batch.getQuantityCurrent() < requested) {
+            throw new InsufficientStockException(batch.getId(), requested, batch.getQuantityCurrent());
+        }
+    }
+
+    private MovementType detectMovementType(StockBatch source, StockBatch dest) {
+        if (!source.getProduct().getId().equals(dest.getProduct().getId())) {
+            throw new IllegalArgumentException("Cannot move between different products: source=" +
+                source.getProduct().getId() + ", dest=" + dest.getProduct().getId());
+        }
+
+        boolean sameLocation = source.getCurrentStorageLocation().getId()
+                                     .equals(dest.getCurrentStorageLocation().getId());
+        boolean configChanged = !Objects.equals(source.getProductState(), dest.getProductState())
+                             || !Objects.equals(
+                                    source.getProductSize() != null ? source.getProductSize().getId() : null,
+                                    dest.getProductSize() != null ? dest.getProductSize().getId() : null)
+                             || !Objects.equals(
+                                    source.getPackagingCatalog() != null ? source.getPackagingCatalog().getId() : null,
+                                    dest.getPackagingCatalog() != null ? dest.getPackagingCatalog().getId() : null);
+
+        if (sameLocation && configChanged) return MovementType.TRASPLANTE;
+        if (!sameLocation && configChanged) return MovementType.MOVIMIENTO_TRASPLANTE;
+        if (!sameLocation && !configChanged) return MovementType.MOVIMIENTO;
+
+        throw new IllegalArgumentException("Invalid desplazamiento: same location with identical config");
+    }
+
+    private void linkMovementToBatch(StockMovement movement, StockBatch batch, boolean isCycleInitiator) {
+        long count = stockBatchMovementRepository.count("batch.id = ?1", batch.getId());
+        int nextOrder = (int) count + 1;
+
+        StockBatchMovement link = new StockBatchMovement();
+        link.setBatch(batch);
+        link.setMovement(movement);
+        link.setQuantity(BigDecimal.valueOf(Math.abs(movement.getQuantity())));
+        link.setCycleInitiator(isCycleInitiator);
+        link.setMovementOrder(nextOrder);
+        stockBatchMovementRepository.persist(link);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SPECIALIZED MOVEMENT OPERATIONS
+    // ═══════════════════════════════════════════════════════════════
+
+    @Transactional
+    public MuerteResponse executeMuerte(UUID userId, MuerteRequest request) {
+        StockBatch batch = stockBatchRepository.findByIdOptional(request.batchId())
+            .orElseThrow(() -> new EntityNotFoundException("StockBatch", request.batchId()));
+
+        validateBatchIsActive(batch);
+        validateSufficientStock(batch, request.quantity());
+
+        User user = userRepository.findByIdOptional(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User", userId));
+
+        // PHASE 1: Create movement
+        StockMovement movement = new StockMovement();
+        movement.setMovementType(MovementType.MUERTE);
+        movement.setQuantity(-request.quantity());  // Negative for egreso
+        movement.setInbound(false);
+        movement.setUser(user);
+        movement.setSourceType(SourceType.MANUAL);
+        movement.setReasonDescription(request.reasonDescription() != null
+            ? request.reasonDescription() : "Plant death");
+        movement.setPerformedAt(Instant.now());
+        stockMovementRepository.persist(movement);
+
+        // PHASE 2: Link to batch
+        linkMovementToBatch(movement, batch, false);
+
+        // Update batch quantity
+        batch.setQuantityCurrent(batch.getQuantityCurrent() - request.quantity());
+        if (batch.getQuantityCurrent() <= 0) {
+            batch.setStatus(BatchStatus.DEPLETED);
+        }
+
+        log.info("MUERTE: {} plants removed from batch {}", request.quantity(), batch.getBatchCode());
+
+        return new MuerteResponse(
+            StockMovementDTO.from(movement),
+            batch.getId(),
+            request.quantity(),
+            batch.getQuantityCurrent()
+        );
+    }
+
+    @Transactional
+    public PlantadoResponse executePlantado(UUID userId, PlantadoRequest request) {
+        StockBatch batch = stockBatchRepository.findByIdOptional(request.batchId())
+            .orElseThrow(() -> new EntityNotFoundException("StockBatch", request.batchId()));
+
+        validateBatchIsActive(batch);
+
+        User user = userRepository.findByIdOptional(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User", userId));
+
+        // PHASE 1: Create movement
+        StockMovement movement = new StockMovement();
+        movement.setMovementType(MovementType.PLANTADO);
+        movement.setQuantity(request.quantity());  // Positive for ingreso
+        movement.setInbound(true);
+        movement.setUser(user);
+        movement.setSourceType(SourceType.MANUAL);
+        movement.setReasonDescription(request.reasonDescription() != null
+            ? request.reasonDescription() : "New planting");
+        movement.setPerformedAt(Instant.now());
+        stockMovementRepository.persist(movement);
+
+        // PHASE 2: Link to batch
+        linkMovementToBatch(movement, batch, false);
+
+        // Update batch quantity
+        batch.setQuantityCurrent(batch.getQuantityCurrent() + request.quantity());
+
+        log.info("PLANTADO: {} plants added to batch {}", request.quantity(), batch.getBatchCode());
+
+        return new PlantadoResponse(
+            StockMovementDTO.from(movement),
+            batch.getId(),
+            batch.getBatchCode(),
+            batch.getCurrentStorageLocation().getId(),
+            batch.getQuantityCurrent()
+        );
+    }
+
+    @Transactional
+    public AjusteResponse executeAjuste(UUID userId, AjusteRequest request) {
+        if (request.quantity() == 0) {
+            throw new IllegalArgumentException("Adjustment quantity cannot be zero");
+        }
+
+        StockBatch batch = stockBatchRepository.findByIdOptional(request.batchId())
+            .orElseThrow(() -> new EntityNotFoundException("StockBatch", request.batchId()));
+
+        validateBatchIsActive(batch);
+
+        // If subtracting, validate sufficient stock
+        if (request.quantity() < 0) {
+            validateSufficientStock(batch, Math.abs(request.quantity()));
+        }
+
+        User user = userRepository.findByIdOptional(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User", userId));
+
+        boolean isInbound = request.quantity() > 0;
+
+        // PHASE 1: Create movement
+        StockMovement movement = new StockMovement();
+        movement.setMovementType(MovementType.AJUSTE);
+        movement.setQuantity(request.quantity());
+        movement.setInbound(isInbound);
+        movement.setUser(user);
+        movement.setSourceType(SourceType.MANUAL);
+        movement.setReasonDescription(request.reasonDescription() != null
+            ? request.reasonDescription() : "Stock adjustment");
+        movement.setPerformedAt(Instant.now());
+        stockMovementRepository.persist(movement);
+
+        // PHASE 2: Link to batch
+        linkMovementToBatch(movement, batch, false);
+
+        // Update batch quantity
+        batch.setQuantityCurrent(batch.getQuantityCurrent() + request.quantity());
+        if (batch.getQuantityCurrent() <= 0) {
+            batch.setStatus(BatchStatus.DEPLETED);
+        }
+
+        log.info("AJUSTE: {} plants adjusted in batch {}", request.quantity(), batch.getBatchCode());
+
+        return new AjusteResponse(
+            StockMovementDTO.from(movement),
+            batch.getId(),
+            request.quantity(),
+            batch.getQuantityCurrent()
+        );
+    }
+
+    @Transactional
+    public DesplazamientoResponse executeDesplazamiento(UUID userId, DesplazamientoRequest request) {
+        // PHASE 1: Get and validate both batches
+        StockBatch sourceBatch = stockBatchRepository.findByIdOptional(request.sourceBatchId())
+            .orElseThrow(() -> new EntityNotFoundException("StockBatch", request.sourceBatchId()));
+        StockBatch destBatch = stockBatchRepository.findByIdOptional(request.destinationBatchId())
+            .orElseThrow(() -> new EntityNotFoundException("StockBatch", request.destinationBatchId()));
+
+        validateBatchIsActive(sourceBatch);
+        validateBatchIsActive(destBatch);
+        validateSufficientStock(sourceBatch, request.quantity());
+
+        User user = userRepository.findByIdOptional(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User", userId));
+
+        // PHASE 2: Auto-detect movement type
+        MovementType movementType = detectMovementType(sourceBatch, destBatch);
+
+        log.info("Executing {}: {} plants from batch {} to {}",
+            movementType, request.quantity(), sourceBatch.getBatchCode(), destBatch.getBatchCode());
+
+        // PHASE 3: Create EGRESO movement (subtract from source)
+        StockMovement egresoMovement = new StockMovement();
+        egresoMovement.setMovementType(movementType);
+        egresoMovement.setQuantity(-request.quantity());
+        egresoMovement.setInbound(false);
+        egresoMovement.setUser(user);
+        egresoMovement.setSourceType(SourceType.MANUAL);
+        egresoMovement.setReasonDescription(request.reasonDescription() != null
+            ? request.reasonDescription()
+            : "%s: Egreso from %s".formatted(movementType, sourceBatch.getBatchCode()));
+        egresoMovement.setPerformedAt(Instant.now());
+        stockMovementRepository.persist(egresoMovement);
+
+        // PHASE 4: Create INGRESO movement (add to destination)
+        StockMovement ingresoMovement = new StockMovement();
+        ingresoMovement.setMovementType(movementType);
+        ingresoMovement.setQuantity(request.quantity());
+        ingresoMovement.setInbound(true);
+        ingresoMovement.setUser(user);
+        ingresoMovement.setSourceType(SourceType.MANUAL);
+        ingresoMovement.setReasonDescription(request.reasonDescription() != null
+            ? request.reasonDescription()
+            : "%s: Ingreso to %s".formatted(movementType, destBatch.getBatchCode()));
+        ingresoMovement.setPerformedAt(Instant.now());
+        ingresoMovement.setParentMovement(egresoMovement);  // Link ingreso to egreso
+        stockMovementRepository.persist(ingresoMovement);
+
+        // PHASE 5: Link movements to batches
+        linkMovementToBatch(egresoMovement, sourceBatch, false);
+        linkMovementToBatch(ingresoMovement, destBatch, false);
+
+        // PHASE 6: Update batch quantities
+        sourceBatch.setQuantityCurrent(sourceBatch.getQuantityCurrent() - request.quantity());
+        destBatch.setQuantityCurrent(destBatch.getQuantityCurrent() + request.quantity());
+
+        if (sourceBatch.getQuantityCurrent() <= 0) {
+            sourceBatch.setStatus(BatchStatus.DEPLETED);
+        }
+
+        log.info("{} completed: {} plants moved", movementType, request.quantity());
+
+        return new DesplazamientoResponse(
+            movementType.name().toLowerCase(),
+            new DesplazamientoResponse.MovementPair(
+                StockMovementDTO.from(egresoMovement),
+                StockMovementDTO.from(ingresoMovement)
+            ),
+            new DesplazamientoResponse.BatchInfo(
+                sourceBatch.getId(),
+                sourceBatch.getBatchCode(),
+                sourceBatch.getCurrentStorageLocation().getId(),
+                sourceBatch.getQuantityCurrent()
+            ),
+            new DesplazamientoResponse.BatchInfo(
+                destBatch.getId(),
+                destBatch.getBatchCode(),
+                destBatch.getCurrentStorageLocation().getId(),
+                destBatch.getQuantityCurrent()
+            ),
+            request.quantity(),
+            Instant.now()
+        );
     }
 }

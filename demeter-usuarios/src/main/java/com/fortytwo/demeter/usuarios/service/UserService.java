@@ -46,7 +46,7 @@ public class UserService {
     @Transactional
     public UserDTO create(CreateUserRequest req) {
         User u = new User();
-        u.setExternalId(UUID.randomUUID().toString());
+        u.setExternalId(req.externalId() != null ? req.externalId() : UUID.randomUUID().toString());
         u.setEmail(req.email());
         u.setName(req.name());
         u.setRole(req.role() != null ? UserRole.valueOf(req.role()) : UserRole.VIEWER);
